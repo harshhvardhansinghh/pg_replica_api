@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * REST controller for handling PostgreSQL replication setup.
+ */
 @RestController
 @RequestMapping("/api/v1/setup")
 public class SetupController {
@@ -20,78 +23,49 @@ public class SetupController {
     }
 
     /**
-     * Generates the Terraform configuration based on provided PostgreSQL configuration.
+     * Sets up the PostgreSQL replication infrastructure and configuration.
+     * This method generates Terraform files, runs `terraform plan` and `apply`,
+     * and executes the Ansible playbook to configure PostgreSQL.
+     *
      * @param config The PostgreSQL configuration.
-     * @return A response indicating success or failure of the configuration generation.
+     * @return A response indicating success or failure of the entire setup process.
      */
-    @PostMapping("/generate")
-    public ResponseEntity<String> generateTerraform(@Validated @RequestBody PostgresConfig config) {
+    @PostMapping("/full-setup")
+    public ResponseEntity<String> setupPostgresReplication(@Validated @RequestBody PostgresConfig config) {
         try {
-            String response = setupService.generateTerraformConfig(config);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to generate Terraform configuration: " + e.getMessage());
-        }
-    }
+            // Step 1: Generate Terraform configuration
+            String generateResponse = setupService.generateTerraformConfig(config);
+            if (generateResponse.contains("Failed")) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Step 1 - Terraform generation failed: " + generateResponse);
+            }
 
-    /**
-     * Executes `terraform plan` to plan the infrastructure setup.
-     * @return The output of the `terraform plan` command.
-     */
-    @PostMapping("/plan")
-    public ResponseEntity<String> runTerraformPlan() {
-        try {
-            String response = setupService.runTerraformPlan();
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to execute Terraform plan: " + e.getMessage());
-        }
-    }
+            // Step 2: Run `terraform plan`
+            String planResponse = setupService.runTerraformPlan();
+            if (planResponse.contains("Failed")) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Step 2 - Terraform plan failed: " + planResponse);
+            }
 
-    /**
-     * Executes `terraform apply` to create the infrastructure.
-     * @return The output of the `terraform apply` command.
-     */
-    @PostMapping("/apply")
-    public ResponseEntity<String> runTerraformApply() {
-        try {
-            String response = setupService.runTerraformApply();
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to apply Terraform configuration: " + e.getMessage());
-        }
-    }
+            // Step 3: Run `terraform apply`
+            String applyResponse = setupService.runTerraformApply();
+            if (applyResponse.contains("Failed")) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Step 3 - Terraform apply failed: " + applyResponse);
+            }
 
-    /**
-     * Runs the Ansible playbook to configure PostgreSQL and set up replication.
-     * @return The output of the Ansible playbook execution.
-     */
-    @PostMapping("/configure")
-    public ResponseEntity<String> runAnsiblePlaybook() {
-        try {
-            String response = setupService.runAnsiblePlaybook();
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to run Ansible playbook: " + e.getMessage());
-        }
-    }
+            // Step 4: Run Ansible playbook
+            String ansibleResponse = setupService.runAnsiblePlaybook();
+            if (ansibleResponse.contains("Failed")) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Step 4 - Ansible playbook execution failed: " + ansibleResponse);
+            }
 
-    /**
-     * Destroys the Terraform-managed infrastructure.
-     * @return The output of the `terraform destroy` command.
-     */
-    @DeleteMapping("/destroy")
-    public ResponseEntity<String> destroyInfrastructure() {
-        try {
-            String response = setupService.destroyInfrastructure();
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok("PostgreSQL replication setup completed successfully.");
+
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to destroy infrastructure: " + e.getMessage());
+                    .body("Setup process encountered an error: " + e.getMessage());
         }
     }
 }
